@@ -15,10 +15,7 @@ def fetch_ep_credentials(api_base_url, client_id, client_secret):
         'grant_type': 'client_credentials'
     }
     response = requests.post(url, data=data)
-    try:
-        response.raise_for_status()
-    except requests.exceptions.HTTPError:
-        print(response.json(), '\n', response.text)
+    response.raise_for_status()
     return response.json()
 
 
@@ -38,6 +35,14 @@ def get_access_token(credentials_path, api_base_url, client_id, client_secret):
     return credentials.get('access_token')
 
 
+def fetch_products(api_base_url, api_token):
+    headers = {'Authorization': f'Bearer {api_token}'}
+    url = url = urljoin(api_base_url, 'pcm/products')
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()['data']
+
+
 if __name__ == '__main__':
     env = Env()
     env.read_env()
@@ -50,9 +55,4 @@ if __name__ == '__main__':
     moltin_access_token = get_access_token('credentials.json', api_base_url, client_id, client_secret)
     print(moltin_access_token)
 
-    headers = {'Authorization': f'Bearer {moltin_access_token}'}
-    url = url = urljoin(api_base_url, 'pcm/products')
-    #response = requests.get(url, headers=headers)
-    #response.raise_for_status()
-
-    #print(response.json())
+    
