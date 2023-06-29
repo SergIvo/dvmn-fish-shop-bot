@@ -2,7 +2,7 @@ import os
 import logging
 import redis
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (Filters, Updater, CallbackQueryHandler, CommandHandler, 
     MessageHandler, CallbackContext, ConversationHandler)
 from environs import Env
@@ -10,26 +10,30 @@ from environs import Env
 _database = None
 
 def start(update: Update, context: CallbackContext):
-    """
-    Хэндлер для состояния START.
-    
-    Бот отвечает пользователю фразой "Привет!" и переводит его в состояние ECHO.
-    Теперь в ответ на его команды будет запускаеться хэндлер echo.
-    """
-    update.message.reply_text(text='Привет!')
-    return "ECHO"
+    keyboard = [
+        [
+            InlineKeyboardButton("Option 1", callback_data='1'),
+            InlineKeyboardButton("Option 2", callback_data='2')
+        ],
+
+        [
+            InlineKeyboardButton("Option 3", callback_data='3')
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text(text='Привет!', reply_markup=reply_markup)
+    return 'ECHO'
 
 
 def echo(update: Update, context: CallbackContext):
-    """
-    Хэндлер для состояния ECHO.
-    
-    Бот отвечает пользователю тем же, что пользователь ему написал.
-    Оставляет пользователя в состоянии ECHO.
-    """
-    users_reply = update.message.text
-    update.message.reply_text(users_reply)
-    return "ECHO"
+    if update.message:
+        user_reply = update.message.text
+        update.message.reply_text(user_reply)
+    else:
+        user_reply = update.callback_query.data
+        update.callback_query.message.reply_text(user_reply)
+    return 'ECHO'
 
 
 def handle_users_reply(update: Update, context: CallbackContext):
@@ -45,7 +49,7 @@ def handle_users_reply(update: Update, context: CallbackContext):
     поэтому по этой фразе выставляется стартовое состояние.
     Если пользователь захочет начать общение с ботом заново, он также может воспользоваться этой командой.
     """
-    db = get_database_connection(update.chat_data.get('db_url'))
+    db = get_database_connection(context.bot_data.get('db_url'))
     if update.message:
         user_reply = update.message.text
         chat_id = update.message.chat_id
@@ -68,37 +72,28 @@ def handle_users_reply(update: Update, context: CallbackContext):
     # Оставляю этот try...except, чтобы код не падал молча.
     # Этот фрагмент можно переписать.
     try:
-        next_state = state_handler(bot, update)
+        next_state = state_handler(update, context)
         db.set(chat_id, next_state)
     except Exception as err:
         print(err)
 
+
 def get_database_connection(database_url):
-    """
-    Возвращает конекшн с базой данных Redis, либо создаёт новый, если он ещё не создан.
-    """
     global _database
     if _database is None:
-        _database = redis.Redis.from_rl(database_url)
+        _database = redis.Redis.from_url(database_url)
     return _database
 
 
 if __name__ == '__main__':
     env = Env()
     env.read_env()
-    token = env("TG_API_KEY")
+    token = env('TG_API_KEY')
 
     updater = Updater(token)
     dispatcher = updater.dispatcher
     dispatcher.bot_data['db_url'] = env('REDIS_DB_URL')
-    conversation_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            'ECHO': [
-                MessageHandler(Filters.text, echo)
-            ]
-        },
-        fallbacks=[CommandHandler('quite', handle_users_reply)]
-    )
-    dispatcher.add_handler(conversation_handler)
+    dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
+    dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
+    dispatcher.add_handler(CommandHandler('start', handle_users_reply))
     updater.start_polling()
