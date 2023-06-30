@@ -1,25 +1,23 @@
-import os
 import logging
 import redis
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (Filters, Updater, CallbackQueryHandler, CommandHandler, 
-    MessageHandler, CallbackContext, ConversationHandler)
+                          MessageHandler, CallbackContext)
 from environs import Env
+from moltin_api_methods import MoltinAPI
 
 _database = None
 
-def start(update: Update, context: CallbackContext):
-    keyboard = [
-        [
-            InlineKeyboardButton("Option 1", callback_data='1'),
-            InlineKeyboardButton("Option 2", callback_data='2')
-        ],
 
-        [
-            InlineKeyboardButton("Option 3", callback_data='3')
-        ]
-    ]
+def start(update: Update, context: CallbackContext):
+    moltin_api = context.bot_data.get('moltin_api')
+    products = moltin_api.fetch_products()
+    keyboard = []
+    for product in products:
+        keyboard.append(
+            [InlineKeyboardButton(product['attributes']['name'], callback_data=product['id'])]
+        )
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text(text='Привет!', reply_markup=reply_markup)
@@ -89,10 +87,18 @@ if __name__ == '__main__':
     env = Env()
     env.read_env()
     token = env('TG_API_KEY')
+    moltin_api_url = env('EP_API_URL')
+    moltin_client_id = env('EP_CLIENT_ID')
+    moltin_client_secret = env('EP_CLIENT_SECRET')
 
     updater = Updater(token)
     dispatcher = updater.dispatcher
     dispatcher.bot_data['db_url'] = env('REDIS_DB_URL')
+    dispatcher.bot_data['moltin_api'] = MoltinAPI(
+        moltin_api_url,
+        moltin_client_id,
+        moltin_client_secret
+    )
     dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
     dispatcher.add_handler(CommandHandler('start', handle_users_reply))
