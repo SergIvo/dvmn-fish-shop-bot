@@ -21,7 +21,7 @@ def start(update: Update, context: CallbackContext):
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text(text='Привет!', reply_markup=reply_markup)
-    return 'ECHO'
+    return 'HANDLE_MENU'
 
 
 def echo(update: Update, context: CallbackContext):
@@ -32,6 +32,21 @@ def echo(update: Update, context: CallbackContext):
         user_reply = update.callback_query.data
         update.callback_query.message.reply_text(user_reply)
     return 'ECHO'
+
+
+def handle_menu(update: Update, context: CallbackContext):
+    moltin_api = context.bot_data.get('moltin_api')
+    product_id = update.callback_query.data
+    product = moltin_api.fetch_product_by_id(product_id)
+    price = moltin_api.get_product_price(product['attributes']['sku'])
+    
+    message_text = f'''
+        {product["attributes"]["name"]}
+        {product["attributes"]["description"]}
+        Price: ${price["attributes"]["currencies"]["USD"]["amount"] / 100}
+    '''
+    update.callback_query.message.reply_text(message_text)
+    return 'START'
 
 
 def handle_users_reply(update: Update, context: CallbackContext):
@@ -63,6 +78,7 @@ def handle_users_reply(update: Update, context: CallbackContext):
     
     states_functions = {
         'START': start,
+        'HANDLE_MENU': handle_menu,
         'ECHO': echo
     }
     state_handler = states_functions[user_state]
@@ -90,6 +106,7 @@ if __name__ == '__main__':
     moltin_api_url = env('EP_API_URL')
     moltin_client_id = env('EP_CLIENT_ID')
     moltin_client_secret = env('EP_CLIENT_SECRET')
+    price_book_id = env('MOLTIN_PRICE_BOOK_ID')
 
     updater = Updater(token)
     dispatcher = updater.dispatcher
@@ -97,7 +114,8 @@ if __name__ == '__main__':
     dispatcher.bot_data['moltin_api'] = MoltinAPI(
         moltin_api_url,
         moltin_client_id,
-        moltin_client_secret
+        moltin_client_secret,
+        price_book_id
     )
     dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
