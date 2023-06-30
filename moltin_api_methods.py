@@ -13,12 +13,14 @@ class MoltinAPI():
         api_base_url,
         client_id,
         client_secret,
+        price_book_id,
         credentials_path='credentials.json'
     ):
         self.api_base_url = api_base_url
         self.client_id = client_id
         self.client_secret = client_secret
         self.credentials_path = credentials_path
+        self.price_book = price_book_id 
         self.api_token = self.get_access_token()
 
     def fetch_ep_credentials(self):
@@ -53,6 +55,23 @@ class MoltinAPI():
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         return response.json()['data']
+
+    def fetch_product_by_id(self, product_id):
+        headers = {'Authorization': f'Bearer {self.api_token}'}
+        url = urljoin(self.api_base_url, f'pcm/products/{product_id}')
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()['data']
+    
+    def get_product_price(self, product_sku):
+        headers = {'Authorization': f'Bearer {self.api_token}'}
+        url = urljoin(self.api_base_url, f'pcm/pricebooks/{self.price_book}/prices')
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        filtered_price = [
+            price for price in response.json()['data'] if price['attributes']['sku'] == product_sku
+        ]
+        return filtered_price[0]
 
     def add_product_to_cart(self, cart_id, product_id, quantity):
         headers = {
@@ -98,13 +117,13 @@ if __name__ == '__main__':
     api_base_url = env('EP_API_URL')
     client_id = env('EP_CLIENT_ID')
     client_secret = env('EP_CLIENT_SECRET')
+    price_book_id = env('MOLTIN_PRICE_BOOK_ID')
 
-    moltin_api = MoltinAPI(api_base_url, client_id, client_secret)
+    moltin_api = MoltinAPI(api_base_url, client_id, client_secret, price_book_id)
 
     products = moltin_api.fetch_products()
-    moltin_api.add_product_to_cart('new_cart', products[0]['id'], 2)
-    cart = moltin_api.get_cart('new_cart')
-    print(cart)
-
-    cart_items = moltin_api.get_cart_items('new_cart')
-    print(cart_items)
+    print(products[1]['id'])
+    sku = products[1]['attributes']['sku']
+    print(sku)
+    price_by_sku = moltin_api.get_product_price_by_sku(sku)
+    print(price_by_sku)
