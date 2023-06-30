@@ -38,14 +38,28 @@ def handle_menu(update: Update, context: CallbackContext):
     moltin_api = context.bot_data.get('moltin_api')
     product_id = update.callback_query.data
     product = moltin_api.fetch_product_by_id(product_id)
+    product_image_id = product['relationships']['main_image']['data']['id']
+    product_image = moltin_api.get_product_photo(product_image_id)
+    image_url = product_image['link']['href']
     price = moltin_api.get_product_price(product['attributes']['sku'])
-    
+
     message_text = f'''
         {product["attributes"]["name"]}
         {product["attributes"]["description"]}
         Price: ${price["attributes"]["currencies"]["USD"]["amount"] / 100}
     '''
-    update.callback_query.message.reply_text(message_text)
+
+    menu_message_id = update.callback_query.message.message_id
+    chat_id = update.callback_query.message.chat_id
+    context.bot.delete_message(
+        chat_id,
+        menu_message_id
+    )
+    context.bot.send_photo(
+        caption=message_text,
+        chat_id=chat_id,
+        photo=image_url
+    )
     return 'START'
 
 

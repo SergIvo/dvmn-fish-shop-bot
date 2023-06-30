@@ -62,7 +62,7 @@ class MoltinAPI():
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         return response.json()['data']
-    
+
     def get_product_price(self, product_sku):
         headers = {'Authorization': f'Bearer {self.api_token}'}
         url = urljoin(self.api_base_url, f'pcm/pricebooks/{self.price_book}/prices')
@@ -72,6 +72,13 @@ class MoltinAPI():
             price for price in response.json()['data'] if price['attributes']['sku'] == product_sku
         ]
         return filtered_price[0]
+
+    def get_product_photo(self, photo_id):
+        headers = {'Authorization': f'Bearer {self.api_token}'}
+        url = urljoin(self.api_base_url, f'v2/files/{photo_id}')
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()['data']
 
     def add_product_to_cart(self, cart_id, product_id, quantity):
         headers = {
