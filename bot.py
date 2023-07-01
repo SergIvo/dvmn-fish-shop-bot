@@ -50,6 +50,24 @@ def handle_menu(update: Update, context: CallbackContext):
 
 def handle_description(update: Update, context: CallbackContext):
     moltin_api = context.bot_data.get('moltin_api')
+    previous_message_id = update.callback_query.message.message_id
+    chat_id = update.callback_query.message.chat_id
+
+    if '##' in update.callback_query.data:
+        quantity, product_id = update.callback_query.data.split('##')
+        cart_id = update.callback_query.message.chat_id
+        cart_items = moltin_api.add_product_to_cart(cart_id, product_id, int(quantity))
+
+        previous_message_text = update.callback_query.message.caption
+        previous_message_markup = update.callback_query.message.reply_markup
+        context.bot.edit_message_caption(
+            chat_id=chat_id,
+            message_id=previous_message_id,
+            caption=previous_message_text + '\nТовар добавлен в корзину.',
+            reply_markup=previous_message_markup
+        )
+        return 'HANDLE_DESCRIPTION'
+
     product_id = update.callback_query.data
     product = moltin_api.fetch_product_by_id(product_id)
     product_image_id = product['relationships']['main_image']['data']['id']
@@ -63,14 +81,19 @@ def handle_description(update: Update, context: CallbackContext):
         Price: ${price["attributes"]["currencies"]["USD"]["amount"] / 100}
     '''
 
-    keyboard = [[InlineKeyboardButton('Назад', callback_data='menu')]]
+    keyboard = [
+        [
+            InlineKeyboardButton('1 кг', callback_data=f'1##{product_id}'),
+            InlineKeyboardButton('5 кг', callback_data=f'5##{product_id}'),
+            InlineKeyboardButton('10 кг', callback_data=f'10##{product_id}'),
+        ],
+        [InlineKeyboardButton('Назад', callback_data='menu')]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    menu_message_id = update.callback_query.message.message_id
-    chat_id = update.callback_query.message.chat_id
     context.bot.delete_message(
         chat_id,
-        menu_message_id
+        previous_message_id
     )
     context.bot.send_photo(
         caption=message_text,
@@ -78,7 +101,7 @@ def handle_description(update: Update, context: CallbackContext):
         photo=image_url,
         reply_markup=reply_markup
     )
-    return 'HANDLE_MENU'
+    return 'HANDLE_DESCRIPTION'
 
 
 def handle_users_reply(update: Update, context: CallbackContext):
@@ -91,8 +114,12 @@ def handle_users_reply(update: Update, context: CallbackContext):
         chat_id = update.callback_query.message.chat_id
     else:
         return
-    if user_reply == '/start':
-        user_state = 'START'
+    states_by_reply = {
+        '/start': 'START',
+        'menu': 'HANDLE_MENU'
+    }
+    if user_reply in states_by_reply:
+        user_state = states_by_reply[user_reply]
     else:
         user_state = db.get(chat_id).decode("utf-8")
 
