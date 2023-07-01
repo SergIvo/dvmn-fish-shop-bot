@@ -114,8 +114,13 @@ def handle_cart(update: Update, context: CallbackContext):
     previous_message_id = update.callback_query.message.message_id
     chat_id = update.callback_query.message.chat_id
 
+    if not update.callback_query.data == 'cart':
+        item_id = update.callback_query.data
+        moltin_api.remove_cart_item(chat_id, item_id)
+
     cart_items = moltin_api.get_cart_items(chat_id)
     cart_description = ''
+    keyboard = []
     for item in cart_items:
         product_price = item['meta']['display_price']['with_tax']['unit']['formatted']
         total_price = item['meta']['display_price']['with_tax']['value']['formatted']
@@ -126,13 +131,17 @@ def handle_cart(update: Update, context: CallbackContext):
             {item['quantity']}кг в корзине общей стоимостью {total_price}\n
         '''
         cart_description += item_details
+        
+        keyboard.append(
+            [InlineKeyboardButton(f'Убрить {item["name"]} из корзины', callback_data=f'{item["id"]}')]
+        )
     cart = moltin_api.get_cart(chat_id)
     cart_price = cart['meta']['display_price']['with_tax']['formatted']
     cart_description += f'Итого: {cart_price}'
 
-    keyboard = [
+    keyboard.append(
         [InlineKeyboardButton('В меню', callback_data='menu')]
-    ]
+    )
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     context.bot.delete_message(
@@ -144,7 +153,7 @@ def handle_cart(update: Update, context: CallbackContext):
         chat_id=chat_id,
         reply_markup=reply_markup
     )
-    return 'HANDLE_DESCRIPTION'
+    return 'HANDLE_CART'
 
 
 def handle_users_reply(update: Update, context: CallbackContext):

@@ -107,6 +107,16 @@ class MoltinAPI():
         response.raise_for_status()
         return response.json()['data']
 
+    def remove_cart_item(self, cart_id, item_id):
+        headers = {
+            'Authorization': f'Bearer {self.api_token}',
+            'Content-Type': 'application/json'
+        }
+        url = urljoin(self.api_base_url, f'v2/carts/{cart_id}/items/{item_id}')
+        response = requests.delete(url, headers=headers)
+        response.raise_for_status()
+        return response.json()['data']
+
     def get_cart_items(self, cart_id):
         headers = {
             'Authorization': f'Bearer {self.api_token}',
@@ -130,7 +140,7 @@ if __name__ == '__main__':
 
     products = moltin_api.fetch_products()
     print(products[1]['id'])
-    sku = products[1]['attributes']['sku']
-    print(sku)
-    price_by_sku = moltin_api.get_product_price_by_sku(sku)
-    print(price_by_sku)
+    items = moltin_api.add_product_to_cart('new_cart', products[1]['id'], 2)
+    print(items)
+    new_items = moltin_api.remove_cart_item('new_cart', items[0]['id'])
+    print(new_items)
