@@ -8,7 +8,8 @@ from environs import Env
 from moltin_api_methods import MoltinAPI
 
 _database = None
-
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
 
 def create_product_menu(moltin_api):
     products = moltin_api.fetch_products()
@@ -18,6 +19,7 @@ def create_product_menu(moltin_api):
         keyboard.append(
             [InlineKeyboardButton(name, callback_data=product['id'])]
         )
+    keyboard.append([InlineKeyboardButton('Корзина', callback_data='cart')])
     return InlineKeyboardMarkup(keyboard)
 
 
@@ -87,7 +89,10 @@ def handle_description(update: Update, context: CallbackContext):
             InlineKeyboardButton('5 кг', callback_data=f'5##{product_id}'),
             InlineKeyboardButton('10 кг', callback_data=f'10##{product_id}'),
         ],
-        [InlineKeyboardButton('Назад', callback_data='menu')]
+        [
+            InlineKeyboardButton('Назад', callback_data='menu'),
+            InlineKeyboardButton('Корзина', callback_data='cart')
+        ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -99,6 +104,44 @@ def handle_description(update: Update, context: CallbackContext):
         caption=message_text,
         chat_id=chat_id,
         photo=image_url,
+        reply_markup=reply_markup
+    )
+    return 'HANDLE_DESCRIPTION'
+
+
+def handle_cart(update: Update, context: CallbackContext):
+    moltin_api = context.bot_data.get('moltin_api')
+    previous_message_id = update.callback_query.message.message_id
+    chat_id = update.callback_query.message.chat_id
+
+    cart_items = moltin_api.get_cart_items(chat_id)
+    cart_description = ''
+    for item in cart_items:
+        product_price = item['meta']['display_price']['with_tax']['unit']['formatted']
+        total_price = item['meta']['display_price']['with_tax']['value']['formatted']
+        item_details = f'''
+            {item['name']}
+            {item['description']}
+            {product_price} за кг
+            {item['quantity']}кг в корзине общей стоимостью {total_price}\n
+        '''
+        cart_description += item_details
+    cart = moltin_api.get_cart(chat_id)
+    cart_price = cart['meta']['display_price']['with_tax']['formatted']
+    cart_description += f'Итого: {cart_price}'
+
+    keyboard = [
+        [InlineKeyboardButton('В меню', callback_data='menu')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    context.bot.delete_message(
+        chat_id,
+        previous_message_id
+    )
+    context.bot.send_message(
+        text=cart_description,
+        chat_id=chat_id,
         reply_markup=reply_markup
     )
     return 'HANDLE_DESCRIPTION'
@@ -116,7 +159,8 @@ def handle_users_reply(update: Update, context: CallbackContext):
         return
     states_by_reply = {
         '/start': 'START',
-        'menu': 'HANDLE_MENU'
+        'menu': 'HANDLE_MENU',
+        'cart': 'HANDLE_CART'
     }
     if user_reply in states_by_reply:
         user_state = states_by_reply[user_reply]
@@ -126,7 +170,8 @@ def handle_users_reply(update: Update, context: CallbackContext):
     states_functions = {
         'START': start,
         'HANDLE_DESCRIPTION': handle_description,
-        'HANDLE_MENU': handle_menu
+        'HANDLE_MENU': handle_menu,
+        'HANDLE_CART': handle_cart
     }
     state_handler = states_functions[user_state]
     # Если вы вдруг не заметите, что python-telegram-bot перехватывает ошибки.
@@ -136,7 +181,7 @@ def handle_users_reply(update: Update, context: CallbackContext):
         next_state = state_handler(update, context)
         db.set(chat_id, next_state)
     except Exception as err:
-        print(err)
+        logger.exception(err)
 
 
 def get_database_connection(database_url):
