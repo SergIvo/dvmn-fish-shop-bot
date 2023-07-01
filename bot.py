@@ -140,7 +140,10 @@ def handle_cart(update: Update, context: CallbackContext):
     cart_description += f'Итого: {cart_price}'
 
     keyboard.append(
-        [InlineKeyboardButton('В меню', callback_data='menu')]
+        [
+            InlineKeyboardButton('В меню', callback_data='menu'),
+            InlineKeyboardButton('Оплатить', callback_data='pay')
+        ]
     )
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -156,6 +159,24 @@ def handle_cart(update: Update, context: CallbackContext):
     return 'HANDLE_CART'
 
 
+def request_email(update: Update, context: CallbackContext):
+    keyboard = [[InlineKeyboardButton('В меню', callback_data='menu')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.message:
+        confirmation = f'Запрос на оплату придет на почту {update.message.text}.'
+        update.message.reply_text(text=confirmation, reply_markup=reply_markup)
+        return 'HANDLE_MENU'
+
+    chat_id = update.callback_query.message.chat_id
+    context.bot.send_message(
+        text='Пожалуйста, напишите ваш адрес электронной почты.',
+        chat_id=chat_id,
+        reply_markup=reply_markup
+    )
+    return 'WAITING_EMAIL'
+
+
 def handle_users_reply(update: Update, context: CallbackContext):
     db = get_database_connection(context.bot_data.get('db_url'))
     if update.message:
@@ -169,7 +190,8 @@ def handle_users_reply(update: Update, context: CallbackContext):
     states_by_reply = {
         '/start': 'START',
         'menu': 'HANDLE_MENU',
-        'cart': 'HANDLE_CART'
+        'cart': 'HANDLE_CART',
+        'pay': 'WAITING_EMAIL'
     }
     if user_reply in states_by_reply:
         user_state = states_by_reply[user_reply]
@@ -180,7 +202,8 @@ def handle_users_reply(update: Update, context: CallbackContext):
         'START': start,
         'HANDLE_DESCRIPTION': handle_description,
         'HANDLE_MENU': handle_menu,
-        'HANDLE_CART': handle_cart
+        'HANDLE_CART': handle_cart,
+        'WAITING_EMAIL': request_email
     }
     state_handler = states_functions[user_state]
     # Если вы вдруг не заметите, что python-telegram-bot перехватывает ошибки.
