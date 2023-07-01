@@ -20,7 +20,20 @@ def start(update: Update, context: CallbackContext):
         )
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text(text='Привет!', reply_markup=reply_markup)
+    if update.message:
+        update.message.reply_text(text='Привет!', reply_markup=reply_markup)
+    else:
+        chat_id = update.callback_query.message.chat_id
+        previous_message_id = update.callback_query.message.message_id
+        context.bot.delete_message(
+            chat_id,
+            previous_message_id
+        )
+        context.bot.send_message(
+            text='Выберите товар',
+            chat_id=chat_id,
+            reply_markup=reply_markup
+        )
     return 'HANDLE_MENU'
 
 
@@ -49,6 +62,9 @@ def handle_menu(update: Update, context: CallbackContext):
         Price: ${price["attributes"]["currencies"]["USD"]["amount"] / 100}
     '''
 
+    keyboard = [[InlineKeyboardButton('Назад', callback_data='/start')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
     menu_message_id = update.callback_query.message.message_id
     chat_id = update.callback_query.message.chat_id
     context.bot.delete_message(
@@ -58,7 +74,8 @@ def handle_menu(update: Update, context: CallbackContext):
     context.bot.send_photo(
         caption=message_text,
         chat_id=chat_id,
-        photo=image_url
+        photo=image_url,
+        reply_markup=reply_markup
     )
     return 'START'
 
