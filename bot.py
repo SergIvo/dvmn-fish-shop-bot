@@ -2,7 +2,7 @@ import logging
 import redis
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (Filters, Updater, CallbackQueryHandler, CommandHandler, 
+from telegram.ext import (Filters, Updater, CallbackQueryHandler, CommandHandler,
                           MessageHandler, CallbackContext)
 from environs import Env
 from moltin_api_methods import MoltinAPI
@@ -10,44 +10,45 @@ from moltin_api_methods import MoltinAPI
 _database = None
 
 
-def start(update: Update, context: CallbackContext):
-    moltin_api = context.bot_data.get('moltin_api')
+def create_product_menu(moltin_api):
     products = moltin_api.fetch_products()
     keyboard = []
     for product in products:
+        name = product['attributes']['name']
         keyboard.append(
-            [InlineKeyboardButton(product['attributes']['name'], callback_data=product['id'])]
+            [InlineKeyboardButton(name, callback_data=product['id'])]
         )
+    return InlineKeyboardMarkup(keyboard)
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
+
+def start(update: Update, context: CallbackContext):
+    moltin_api = context.bot_data.get('moltin_api')
+    reply_markup = create_product_menu(moltin_api)
+
     if update.message:
         update.message.reply_text(text='Привет!', reply_markup=reply_markup)
-    else:
-        chat_id = update.callback_query.message.chat_id
-        previous_message_id = update.callback_query.message.message_id
-        context.bot.delete_message(
-            chat_id,
-            previous_message_id
-        )
-        context.bot.send_message(
-            text='Выберите товар',
-            chat_id=chat_id,
-            reply_markup=reply_markup
-        )
-    return 'HANDLE_MENU'
-
-
-def echo(update: Update, context: CallbackContext):
-    if update.message:
-        user_reply = update.message.text
-        update.message.reply_text(user_reply)
-    else:
-        user_reply = update.callback_query.data
-        update.callback_query.message.reply_text(user_reply)
-    return 'ECHO'
+    return 'HANDLE_DESCRIPTION'
 
 
 def handle_menu(update: Update, context: CallbackContext):
+    moltin_api = context.bot_data.get('moltin_api')
+    reply_markup = create_product_menu(moltin_api)
+
+    chat_id = update.callback_query.message.chat_id
+    previous_message_id = update.callback_query.message.message_id
+    context.bot.delete_message(
+        chat_id,
+        previous_message_id
+    )
+    context.bot.send_message(
+        text='Выберите товар',
+        chat_id=chat_id,
+        reply_markup=reply_markup
+    )
+    return 'HANDLE_DESCRIPTION'
+
+
+def handle_description(update: Update, context: CallbackContext):
     moltin_api = context.bot_data.get('moltin_api')
     product_id = update.callback_query.data
     product = moltin_api.fetch_product_by_id(product_id)
@@ -62,7 +63,7 @@ def handle_menu(update: Update, context: CallbackContext):
         Price: ${price["attributes"]["currencies"]["USD"]["amount"] / 100}
     '''
 
-    keyboard = [[InlineKeyboardButton('Назад', callback_data='/start')]]
+    keyboard = [[InlineKeyboardButton('Назад', callback_data='menu')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     menu_message_id = update.callback_query.message.message_id
@@ -77,22 +78,10 @@ def handle_menu(update: Update, context: CallbackContext):
         photo=image_url,
         reply_markup=reply_markup
     )
-    return 'START'
+    return 'HANDLE_MENU'
 
 
 def handle_users_reply(update: Update, context: CallbackContext):
-    """
-    Функция, которая запускается при любом сообщении от пользователя и решает как его обработать.
-    Эта функция запускается в ответ на эти действия пользователя:
-        * Нажатие на inline-кнопку в боте
-        * Отправка сообщения боту
-        * Отправка команды боту
-    Она получает стейт пользователя из базы данных и запускает соответствующую функцию-обработчик (хэндлер).
-    Функция-обработчик возвращает следующее состояние, которое записывается в базу данных.
-    Если пользователь только начал пользоваться ботом, Telegram форсит его написать "/start",
-    поэтому по этой фразе выставляется стартовое состояние.
-    Если пользователь захочет начать общение с ботом заново, он также может воспользоваться этой командой.
-    """
     db = get_database_connection(context.bot_data.get('db_url'))
     if update.message:
         user_reply = update.message.text
@@ -106,11 +95,11 @@ def handle_users_reply(update: Update, context: CallbackContext):
         user_state = 'START'
     else:
         user_state = db.get(chat_id).decode("utf-8")
-    
+
     states_functions = {
         'START': start,
-        'HANDLE_MENU': handle_menu,
-        'ECHO': echo
+        'HANDLE_DESCRIPTION': handle_description,
+        'HANDLE_MENU': handle_menu
     }
     state_handler = states_functions[user_state]
     # Если вы вдруг не заметите, что python-telegram-bot перехватывает ошибки.
