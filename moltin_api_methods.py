@@ -117,6 +117,33 @@ class MoltinAPI():
         response.raise_for_status()
         return response.json()['data']
 
+    def create_customer(self, name, email):
+        headers = {
+            'Authorization': f'Bearer {self.api_token}',
+            'Content-Type': 'application/json'
+        }
+        url = urljoin(self.api_base_url, f'v2/customers')
+        payload = {
+            'data': {
+                'type': 'customer',
+                'name': name,
+                'email': email
+            }
+        }
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()['data']
+
+    def get_customer(self, customer_id):
+        headers = {
+            'Authorization': f'Bearer {self.api_token}',
+            'Content-Type': 'application/json'
+        }
+        url = urljoin(self.api_base_url, f'v2/customers/{customer_id}')
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()['data']
+
     def get_cart_items(self, cart_id):
         headers = {
             'Authorization': f'Bearer {self.api_token}',
@@ -138,9 +165,7 @@ if __name__ == '__main__':
 
     moltin_api = MoltinAPI(api_base_url, client_id, client_secret, price_book_id)
 
-    products = moltin_api.fetch_products()
-    print(products[1]['id'])
-    items = moltin_api.add_product_to_cart('new_cart', products[1]['id'], 2)
-    print(items)
-    new_items = moltin_api.remove_cart_item('new_cart', items[0]['id'])
-    print(new_items)
+    customer = moltin_api.create_customer('New Customer', 'mail@sample.com')
+    print(customer)
+    customer_info = moltin_api.get_customer(customer['id'])
+    print(customer_info)

@@ -164,6 +164,12 @@ def request_email(update: Update, context: CallbackContext):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     if update.message:
+        user_email = update.message.text
+        user_name = update.effective_user.first_name
+        moltin_api = context.bot_data.get('moltin_api')
+        new_customer = moltin_api.create_customer(user_name, user_email)
+        print(new_customer)
+
         confirmation = f'Запрос на оплату придет на почту {update.message.text}.'
         update.message.reply_text(text=confirmation, reply_markup=reply_markup)
         return 'HANDLE_MENU'
