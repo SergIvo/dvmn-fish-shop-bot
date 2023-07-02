@@ -1,15 +1,15 @@
 import logging
-import redis
 
+from redis import Redis
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (Filters, Updater, CallbackQueryHandler, CommandHandler,
                           MessageHandler, CallbackContext)
 from environs import Env
 from moltin_api_methods import MoltinAPI
+from telegram_logging import TgLogsHandler
 
-_database = None
-logging.basicConfig(level=logging.WARNING)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('fish-shop-bot')
+
 
 def create_product_menu(moltin_api):
     products = moltin_api.fetch_products()
@@ -184,7 +184,10 @@ def request_email(update: Update, context: CallbackContext):
 
 
 def handle_users_reply(update: Update, context: CallbackContext):
-    db = get_database_connection(context.bot_data.get('db_url'))
+    if not context.bot_data.get('db'):
+        context.bot_data['db'] = Redis.from_url(context.bot_data.get('db_url'))
+    db = context.bot_data.get('db')
+
     if update.message:
         user_reply = update.message.text
         chat_id = update.message.chat_id
@@ -212,9 +215,6 @@ def handle_users_reply(update: Update, context: CallbackContext):
         'WAITING_EMAIL': request_email
     }
     state_handler = states_functions[user_state]
-    # Если вы вдруг не заметите, что python-telegram-bot перехватывает ошибки.
-    # Оставляю этот try...except, чтобы код не падал молча.
-    # Этот фрагмент можно переписать.
     try:
         next_state = state_handler(update, context)
         db.set(chat_id, next_state)
@@ -222,23 +222,24 @@ def handle_users_reply(update: Update, context: CallbackContext):
         logger.exception(err)
 
 
-def get_database_connection(database_url):
-    global _database
-    if _database is None:
-        _database = redis.Redis.from_url(database_url)
-    return _database
-
-
 if __name__ == '__main__':
     env = Env()
     env.read_env()
-    token = env('TG_API_KEY')
+    tg_api_key = env('TG_API_KEY')
     moltin_api_url = env('EP_API_URL')
     moltin_client_id = env('EP_CLIENT_ID')
     moltin_client_secret = env('EP_CLIENT_SECRET')
     price_book_id = env('MOLTIN_PRICE_BOOK_ID')
+    tg_log_chat_id = env('TG_LOG_CHAT_ID')
 
-    updater = Updater(token)
+    logger.setLevel(logging.INFO)
+    log_handler = TgLogsHandler(tg_api_key, tg_log_chat_id)
+    log_handler.setFormatter(
+        logging.Formatter('%(name)s %(levelname)s %(message)s')
+    )
+    logger.addHandler(log_handler)
+
+    updater = Updater(tg_api_key)
     dispatcher = updater.dispatcher
     dispatcher.bot_data['db_url'] = env('REDIS_DB_URL')
     dispatcher.bot_data['moltin_api'] = MoltinAPI(
@@ -250,4 +251,11 @@ if __name__ == '__main__':
     dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
     dispatcher.add_handler(CommandHandler('start', handle_users_reply))
-    updater.start_polling()
+    
+    logger.info('Bot started')
+    while True:
+        try:
+            updater.start_polling()
+            updater.idle()
+        except Exception as ex:
+            logger.exception(ex)
