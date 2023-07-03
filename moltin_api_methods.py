@@ -12,17 +12,14 @@ class MoltinAPI():
         api_base_url,
         client_id,
         client_secret,
-        price_book_id,
-        credentials_path='credentials.json'
+        price_book_id
     ):
         self.api_base_url = api_base_url
         self.client_id = client_id
         self.client_secret = client_secret
-        self.credentials_path = credentials_path
+        self.credentials = {}
         self.price_book = price_book_id
-        self.headers = {
-            'Authorization': f'Bearer {self.get_access_token()}'
-        }
+        self.headers = {}
 
     def fetch_ep_credentials(self):
         url = urljoin(self.api_base_url, 'oauth/access_token')
@@ -35,22 +32,20 @@ class MoltinAPI():
         response.raise_for_status()
         return response.json()
 
-    def get_access_token(self):
-        if exists(self.credentials_path):
-            with open(self.credentials_path, 'r') as json_file:
-                credentials = json.loads(json_file.read())
-
+    def get_fresh_access_token(self):
+        if self.credentials:
             current_time = time.time()
-            expiration_time = credentials.get('expires')
+            expiration_time = self.credentials.get('expires')
             if current_time < expiration_time:
-                return credentials.get('access_token')
+                return self.credentials.get('access_token')
 
-        credentials = self.fetch_ep_credentials()
-        with open(self.credentials_path, 'w') as json_file:
-            json_file.write(json.dumps(credentials))
-        return credentials.get('access_token')
+        self.credentials = self.fetch_ep_credentials()
+        return self.credentials.get('access_token')
 
     def make_get_request(self, url):
+        self.headers = {
+            'Authorization': f'Bearer {self.get_fresh_access_token()}'
+        }
         response = requests.get(url, headers=self.headers)
         response.raise_for_status()
         return response.json()['data']
@@ -76,6 +71,9 @@ class MoltinAPI():
         return self.make_get_request(url)
 
     def add_product_to_cart(self, cart_id, product_id, quantity):
+        self.headers = {
+            'Authorization': f'Bearer {self.get_fresh_access_token()}'
+        }
         url = urljoin(self.api_base_url, f'v2/carts/{cart_id}/items')
         payload = {
             'data': {
@@ -97,12 +95,18 @@ class MoltinAPI():
         return self.make_get_request(url)
 
     def remove_cart_item(self, cart_id, item_id):
+        self.headers = {
+            'Authorization': f'Bearer {self.get_fresh_access_token()}'
+        }
         url = urljoin(self.api_base_url, f'v2/carts/{cart_id}/items/{item_id}')
         response = requests.delete(url, headers=self.headers)
         response.raise_for_status()
         return response.json()['data']
 
     def create_customer(self, name, email):
+        self.headers = {
+            'Authorization': f'Bearer {self.get_fresh_access_token()}'
+        }
         url = urljoin(self.api_base_url, 'v2/customers')
         payload = {
             'data': {
