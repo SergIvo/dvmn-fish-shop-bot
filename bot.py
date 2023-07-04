@@ -55,10 +55,15 @@ def handle_description(update: Update, context: CallbackContext):
     previous_message_id = update.callback_query.message.message_id
     chat_id = update.callback_query.message.chat_id
 
+    if update.callback_query.data == 'cart':
+        return handle_cart(update, context)
+    elif update.callback_query.data == 'menu':
+        return handle_menu(update, context)
+
     if '##' in update.callback_query.data:
         quantity, product_id = update.callback_query.data.split('##')
         cart_id = update.callback_query.message.chat_id
-        cart_items = moltin_api.add_product_to_cart(cart_id, product_id, int(quantity))
+        moltin_api.add_product_to_cart(cart_id, product_id, int(quantity))
 
         previous_message_text = update.callback_query.message.caption
         previous_message_markup = update.callback_query.message.reply_markup
@@ -114,7 +119,11 @@ def handle_cart(update: Update, context: CallbackContext):
     previous_message_id = update.callback_query.message.message_id
     chat_id = update.callback_query.message.chat_id
 
-    if not update.callback_query.data == 'cart':
+    if update.callback_query.data == 'menu':
+        return handle_menu(update, context)
+    elif update.callback_query.data == 'pay':
+        return request_email(update, context)
+    elif not update.callback_query.data == 'cart':
         item_id = update.callback_query.data
         moltin_api.remove_cart_item(chat_id, item_id)
 
@@ -131,9 +140,9 @@ def handle_cart(update: Update, context: CallbackContext):
             {item['quantity']}кг в корзине общей стоимостью {total_price}\n
         '''
         cart_description += item_details
-        
+
         keyboard.append(
-            [InlineKeyboardButton(f'Убрить {item["name"]} из корзины', callback_data=f'{item["id"]}')]
+            [InlineKeyboardButton(f'Убрать {item["name"]} из корзины', callback_data=f'{item["id"]}')]
         )
     cart = moltin_api.get_cart(chat_id)
     cart_price = cart['meta']['display_price']['with_tax']['formatted']
@@ -167,12 +176,13 @@ def request_email(update: Update, context: CallbackContext):
         user_email = update.message.text
         user_name = update.effective_user.first_name
         moltin_api = context.bot_data.get('moltin_api')
-        new_customer = moltin_api.create_customer(user_name, user_email)
-        print(new_customer)
+        moltin_api.create_customer(user_name, user_email)
 
         confirmation = f'Запрос на оплату придет на почту {update.message.text}.'
         update.message.reply_text(text=confirmation, reply_markup=reply_markup)
         return 'HANDLE_MENU'
+    elif update.callback_query.data == 'menu':
+        return handle_menu(update, context)
 
     chat_id = update.callback_query.message.chat_id
     context.bot.send_message(
@@ -196,14 +206,9 @@ def handle_users_reply(update: Update, context: CallbackContext):
         chat_id = update.callback_query.message.chat_id
     else:
         return
-    states_by_reply = {
-        '/start': 'START',
-        'menu': 'HANDLE_MENU',
-        'cart': 'HANDLE_CART',
-        'pay': 'WAITING_EMAIL'
-    }
-    if user_reply in states_by_reply:
-        user_state = states_by_reply[user_reply]
+
+    if user_reply == '/start':
+        user_state = 'START'
     else:
         user_state = db.get(chat_id).decode("utf-8")
 
@@ -251,7 +256,7 @@ if __name__ == '__main__':
     dispatcher.add_handler(CallbackQueryHandler(handle_users_reply))
     dispatcher.add_handler(MessageHandler(Filters.text, handle_users_reply))
     dispatcher.add_handler(CommandHandler('start', handle_users_reply))
-    
+
     logger.info('Bot started')
     while True:
         try:
